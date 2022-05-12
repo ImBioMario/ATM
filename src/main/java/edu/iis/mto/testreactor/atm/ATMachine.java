@@ -57,7 +57,7 @@ public class ATMachine {
         try {
             return bank.autorize(pin.getPIN(), card.getNumber());
         } catch (AuthorizationException e) {
-            throw new ATMOperationException(ErrorCode.AHTHORIZATION);
+            throw new ATMOperationException(ErrorCode.AUTHORIZATION);
         }
     }
 

@@ -12,7 +12,7 @@ public enum Banknote {
     PL_50(50, "PLN"),
     PL_100(100, "PLN"),
     PL_200(200, "PLN"),
-    PL_500(200, "PLN");
+    PL_500(500, "PLN");
 
     private static final Map<String, List<Banknote>> banknotesForCurrency;
     static {
