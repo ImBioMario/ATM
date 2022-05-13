@@ -4,10 +4,11 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.*;
 
 import edu.iis.mto.testreactor.atm.bank.AccountException;
 import edu.iis.mto.testreactor.atm.bank.AuthorizationException;
+import edu.iis.mto.testreactor.atm.bank.AuthorizationToken;
 import edu.iis.mto.testreactor.atm.bank.Bank;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -168,5 +170,19 @@ class ATMachineTest {
         assertEquals(atm.withdraw(pin, card, new Money(1580)), Withdrawal.create(correctWithdraw));
         assertEquals(atm.getCurrentDeposit(), afterDeposit);
 
+    }
+
+    @Test
+    void callOrderCheck() throws ATMOperationException, AuthorizationException, AccountException {
+        banknotes = List.of(BanknotesPack.create(3, Banknote.PL_10));
+        atm.setDeposit(MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), banknotes));
+        AuthorizationToken dummyToken = AuthorizationToken.create("token :)");
+        Money withdrawedMoney = new Money(10);
+        when(bank.autorize(pin.getPIN(), card.getNumber())).thenReturn(dummyToken);
+        atm.withdraw(pin, card, withdrawedMoney);
+
+        InOrder callOrder = inOrder(bank);
+        callOrder.verify(bank).autorize(pin.getPIN(), card.getNumber());
+        callOrder.verify(bank).charge(dummyToken, withdrawedMoney);
     }
 }
