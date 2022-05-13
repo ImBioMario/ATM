@@ -6,9 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
+import edu.iis.mto.testreactor.atm.bank.AccountException;
 import edu.iis.mto.testreactor.atm.bank.AuthorizationException;
 import edu.iis.mto.testreactor.atm.bank.Bank;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,11 @@ class ATMachineTest {
         pin = PinCode.createPIN(1,2,3,4);
         card = Card.create("123456789");
     }
+    @AfterEach
+    void cleanUp(){
+        atm = null;
+        banknotes = null;
+    }
 
     @Test
     void successfulWithdrawal() throws ATMOperationException {
@@ -52,17 +59,30 @@ class ATMachineTest {
 
     @Test
     void succesfulWithdrawalAndCorrectAmountOfDepositLeft() throws ATMOperationException {
-        BanknotesPack hundreds = BanknotesPack.create(100, Banknote.PL_100);
-        banknotes.add(hundreds);
-        MoneyDeposit deposit = MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), banknotes);
-        atm.setDeposit(deposit);
+        banknotes = List.of(
+                BanknotesPack.create(0, Banknote.PL_10),
+                BanknotesPack.create(0, Banknote.PL_20),
+                BanknotesPack.create(0, Banknote.PL_50),
+                BanknotesPack.create(100, Banknote.PL_100),
+                BanknotesPack.create(0, Banknote.PL_200),
+                BanknotesPack.create(0, Banknote.PL_500)
+        );
+        atm.setDeposit(MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), banknotes));
 
         List<BanknotesPack> correctWithdraw = new ArrayList<>();
         correctWithdraw.add(BanknotesPack.create(10, Banknote.PL_100));
 
+        MoneyDeposit afterDeposit = MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), List.of(
+                BanknotesPack.create(0, Banknote.PL_10),
+                BanknotesPack.create(0, Banknote.PL_20),
+                BanknotesPack.create(0, Banknote.PL_50),
+                BanknotesPack.create(90, Banknote.PL_100),
+                BanknotesPack.create(0, Banknote.PL_200),
+                BanknotesPack.create(0, Banknote.PL_500)));
+
         assertEquals(atm.withdraw(pin, card, new Money(1000)), Withdrawal.create(correctWithdraw));
-        int banknotesLeft = atm.getCurrentDeposit().getBanknotes().get(0).getCount();
-        assertEquals(banknotesLeft, 100-10);
+
+        assertEquals(afterDeposit, atm.getCurrentDeposit());
     }
 
     @Test
@@ -71,6 +91,40 @@ class ATMachineTest {
         doThrow(AuthorizationException.class).when(bank).autorize(any(), any());
         ATMOperationException errCode = assertThrows(ATMOperationException.class, () -> atm.withdraw(pin, card, new Money(100)));
         assertEquals(errCode.getErrorCode(), ErrorCode.AUTHORIZATION);
+    }
+
+    @Test
+    void failedWithdrawalWrongCurrency(){
+        BanknotesPack hundreds = BanknotesPack.create(100, Banknote.PL_200);
+        banknotes.add(hundreds);
+        MoneyDeposit deposit = MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), banknotes);
+        atm.setDeposit(deposit);
+
+        ATMOperationException errCode = assertThrows(ATMOperationException.class, () -> atm.withdraw(pin, card, new Money(200, "USD")));
+        assertEquals(errCode.getErrorCode(), ErrorCode.WRONG_CURRENCY);
+    }
+
+    @Test
+    void failedWithdrawalWrongAmount(){
+        BanknotesPack hundreds = BanknotesPack.create(100, Banknote.PL_500);
+        banknotes.add(hundreds);
+        MoneyDeposit deposit = MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), banknotes);
+        atm.setDeposit(deposit);
+
+        ATMOperationException errCode = assertThrows(ATMOperationException.class, () -> atm.withdraw(pin, card, new Money(200)));
+        assertEquals(errCode.getErrorCode(), ErrorCode.WRONG_AMOUNT);
+    }
+
+    @Test
+    void failedWithdrawalAccountExceptionThrownByBank() throws AccountException {
+        BanknotesPack hundreds = BanknotesPack.create(100, Banknote.PL_500);
+        banknotes.add(hundreds);
+        MoneyDeposit deposit = MoneyDeposit.create(atm.getCurrentDeposit().getCurrency(), banknotes);
+        atm.setDeposit(deposit);
+
+        doThrow(AccountException.class).when(bank).charge(any(), any());
+        ATMOperationException errCode = assertThrows(ATMOperationException.class, () -> atm.withdraw(pin, card, new Money(500)));
+        assertEquals(errCode.getErrorCode(), ErrorCode.NO_FUNDS_ON_ACCOUNT);
     }
 
 }
